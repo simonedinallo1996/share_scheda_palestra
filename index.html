@@ -208,7 +208,24 @@
 
 <div id="modalRoot"></div>
 
+<!-- Firebase (dati condivisi tra tutti i dispositivi) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+
 <script>
+// ==== CONFIGURAZIONE FIREBASE ====
+// Incolla qui l'oggetto firebaseConfig che trovi nella console Firebase
+// (Impostazioni progetto > Generale > Le tue app > SDK Firebase).
+const firebaseConfig = {
+  apiKey: "AIzaSyB1dDfiFvTsgs7e3ZLczLbcZsf-2VuiQcw",
+  authDomain: "palestragiovanni.firebaseapp.com",
+  projectId: "palestragiovanni",
+  storageBucket: "palestragiovanni.firebasestorage.app",
+  messagingSenderId: "759282417877",
+  appId: "1:759282417877:web:b3c5fc4df905773977225c"
+};
+// ===================================
+
 let db = null;
 let giorni = [];
 let esercizi = [];
@@ -565,19 +582,16 @@ function showToast(message){
   toastTimer = setTimeout(() => { t.remove(); }, 2800);
 }
 
-// ---------- DB wiring ----------
+// ---------- DB wiring (Firebase Firestore, dati condivisi tra tutti) ----------
 async function writeDoc(col, id, data){
-  if (!db){ showToast('Salvataggio non disponibile: apri il link pubblicato.'); return; }
+  if (!db){ showToast('Salvataggio non disponibile: controlla la configurazione Firebase.'); return; }
   try{
-    await db.collection(col).doc(id).set({ ...(col==='giorni'? (giorni.find(g=>g.id===id)||{}) : (esercizi.find(e=>e.id===id)||{})), id, ...data });
+    const list = col === 'giorni' ? giorni : esercizi;
+    const existing = list.find(x => x.id === id) || {};
+    await db.collection(col).doc(id).set({ ...existing, id, ...data });
   }catch(err){
     console.error(err);
-    if (err && err.code === 'invalid_argument' && canWrite === true){
-      canWrite = false;
-      showToast('Non hai i permessi per modificare la scheda su questa pagina.');
-    } else {
-      showToast('Salvataggio non riuscito, riprova.');
-    }
+    showToast('Salvataggio non riuscito, riprova.');
   }
 }
 async function deleteDoc(col, id){
@@ -588,17 +602,16 @@ async function deleteDoc(col, id){
 
 async function init(){
   try{
-    if (window.claude && window.claude.use){
-      db = await window.claude.use('db');
-    }
-  }catch(e){ db = null; }
+    const app = firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore(app);
+  }catch(e){ console.error(e); db = null; }
 
   if (db){
     db.collection('giorni').onSnapshot(snap => {
       giorni = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       ready = true;
       render();
-    }, err => { console.error('giorni error', err); ready = true; render(); });
+    }, err => { console.error('giorni error', err); showToast('Errore di connessione al database.'); ready = true; render(); });
 
     db.collection('esercizi').onSnapshot(snap => {
       esercizi = snap.docs.map(d => ({ id: d.id, ...d.data() }));
